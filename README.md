@@ -70,8 +70,8 @@ PORT=5000
 ```
 
 #### Database Setup
-1. MySQL'de `tahmin_uygulamasi` database'ini oluşturun
-2. `database-tables.sql` dosyasını çalıştırın
+1. Create a new database in MySQL called `tahmin_uygulamasi`.
+2. Import the tables and sample data by running the `backend/database-setup.sql` script. This will set up all the necessary tables and provide you with default admin and user accounts.
 
 ```bash
 npm start

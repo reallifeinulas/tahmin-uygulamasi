@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const { getWeeksAgo, formatWeekRange } = require('../utils/weekUtils');
-const { testWeeklyReset } = require('../services/weeklyResetService');
 
 // Haftalık sıralamaları getir
 router.get('/weekly-rankings', auth, async (req, res) => {
@@ -181,35 +180,6 @@ router.get('/all', auth, async (req, res) => {
   } catch (error) {
     console.error('All awards error:', error);
     res.status(500).json({ message: 'Sunucu hatası' });
-  }
-});
-
-// TEST ENDPOINT - Sadece development için
-router.post('/test-reset', auth, async (req, res) => {
-  try {
-    const db = req.app.locals.db;
-
-    // Admin kontrolü
-    const [adminUser] = await db.execute(
-      'SELECT role FROM users WHERE id = ?',
-      [req.userId]
-    );
-
-    if (adminUser.length === 0 || adminUser[0].role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Yetkiniz bulunmamaktadır' });
-    }
-
-    console.log('🧪 TEST: Manuel haftalık reset başlatılıyor (Admin tarafından)...');
-    const result = await testWeeklyReset(db);
-
-    res.json(result);
-  } catch (error) {
-    console.error('Test reset error:', error);
-    res.status(500).json({ 
-      success: false,
-      message: 'Test reset işlemi başarısız',
-      error: error.message 
-    });
   }
 });
 

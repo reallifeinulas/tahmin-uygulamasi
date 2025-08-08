@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const { body, validationResult } = require('express-validator');
 
 // Test endpoint - Database connection test
 router.get('/test', async (req, res) => {
@@ -51,113 +52,67 @@ router.get('/', async (req, res) => {
 });
 
 // Maç oluştur (Admin)
-router.post('/', auth, async (req, res) => {
-  try {
-    const { home_team, away_team, match_date, league, home_points, away_points, draw_points } = req.body;
-    const db = req.app.locals.db;
-
-    // Admin kontrolü
-    const [adminUser] = await db.execute(
-      'SELECT role FROM users WHERE id = ?',
-      [req.userId]
-    );
-
-    if (adminUser.length === 0 || adminUser[0].role !== 'admin') {
-      return res.status(403).json({ message: 'Yetkiniz bulunmamaktadır' });
+router.post('/',
+  auth,
+  [
+    body('home_team').trim().notEmpty().withMessage('Ev sahibi takım adı gerekli').isLength({ max: 100 }).withMessage('Ev sahibi takım adı 100 karakterden uzun olamaz'),
+    body('away_team').trim().notEmpty().withMessage('Deplasman takım adı gerekli').isLength({ max: 100 }).withMessage('Deplasman takım adı 100 karakterden uzun olamaz')
+      .custom((value, { req }) => {
+        if (value.toLowerCase() === req.body.home_team.toLowerCase()) {
+          throw new Error('Bir takım kendisiyle oynayamaz');
+        }
+        return true;
+      }),
+    body('match_date').notEmpty().withMessage('Maç tarihi gerekli').isISO8601().withMessage('Geçersiz tarih formatı')
+      .custom(value => {
+        if (new Date(value) <= new Date()) {
+          throw new Error('Maç tarihi gelecekte olmalıdır');
+        }
+        return true;
+      }),
+    body('league').trim().notEmpty().withMessage('Lig adı gerekli').isLength({ max: 100 }).withMessage('Lig adı 100 karakterden uzun olamaz'),
+    body('home_points').optional().isInt({ min: 1, max: 10000 }).withMessage('Puanlar 1 ile 10000 arasında olmalıdır'),
+    body('away_points').optional().isInt({ min: 1, max: 10000 }).withMessage('Puanlar 1 ile 10000 arasında olmalıdır'),
+    body('draw_points').optional().isInt({ min: 1, max: 10000 }).withMessage('Puanlar 1 ile 10000 arasında olmalıdır'),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
     }
 
-    // Validation
-    const validationErrors = [];
+    try {
+      const { home_team, away_team, match_date, league, home_points, away_points, draw_points } = req.body;
+      const db = req.app.locals.db;
 
-    // Required fields kontrolü
-    if (!home_team || home_team.trim().length === 0) {
-      validationErrors.push('Ev sahibi takım adı gerekli');
-    }
-    if (!away_team || away_team.trim().length === 0) {
-      validationErrors.push('Deplasman takım adı gerekli');
-    }
-    if (!match_date) {
-      validationErrors.push('Maç tarihi gerekli');
-    }
-    if (!league || league.trim().length === 0) {
-      validationErrors.push('Lig adı gerekli');
-    }
+      // Admin kontrolü
+      const [adminUser] = await db.execute(
+        'SELECT role FROM users WHERE id = ?',
+        [req.userId]
+      );
 
-    // String length kontrolü
-    if (home_team && home_team.trim().length > 100) {
-      validationErrors.push('Ev sahibi takım adı 100 karakterden uzun olamaz');
-    }
-    if (away_team && away_team.trim().length > 100) {
-      validationErrors.push('Deplasman takım adı 100 karakterden uzun olamaz');
-    }
-    if (league && league.trim().length > 100) {
-      validationErrors.push('Lig adı 100 karakterden uzun olamaz');
-    }
-
-    // Tarih kontrolü
-    if (match_date) {
-      const matchDateTime = new Date(match_date);
-      const now = new Date();
-      
-      if (isNaN(matchDateTime.getTime())) {
-        validationErrors.push('Geçersiz tarih formatı');
-      } else if (matchDateTime <= now) {
-        validationErrors.push('Maç tarihi gelecekte olmalıdır');
+      if (adminUser.length === 0 || adminUser[0].role !== 'admin') {
+        return res.status(403).json({ message: 'Yetkiniz bulunmamaktadır' });
       }
-    }
 
-    // Puan kontrolü (sadece negatif değerleri ve aşırı büyük sayıları engelle)
-    const homePoints = parseInt(home_points) || 10;
-    const awayPoints = parseInt(away_points) || 10;
-    const drawPoints = parseInt(draw_points) || 15;
+      const homePoints = parseInt(home_points) || 10;
+      const awayPoints = parseInt(away_points) || 10;
+      const drawPoints = parseInt(draw_points) || 15;
 
-    if (homePoints < 1) {
-      validationErrors.push('Ev sahibi puanı pozitif bir sayı olmalıdır');
-    }
-    if (awayPoints < 1) {
-      validationErrors.push('Deplasman puanı pozitif bir sayı olmalıdır');
-    }
-    if (drawPoints < 1) {
-      validationErrors.push('Beraberlik puanı pozitif bir sayı olmalıdır');
-    }
-    
-    // Aşırı büyük sayıları engelle (makul bir üst limit)
-    if (homePoints > 10000) {
-      validationErrors.push('Ev sahibi puanı çok yüksek (max 10000)');
-    }
-    if (awayPoints > 10000) {
-      validationErrors.push('Deplasman puanı çok yüksek (max 10000)');
-    }
-    if (drawPoints > 10000) {
-      validationErrors.push('Beraberlik puanı çok yüksek (max 10000)');
-    }
+      const [result] = await db.execute(
+        'INSERT INTO matches (home_team, away_team, match_date, league, home_points, away_points, draw_points) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [home_team.trim(), away_team.trim(), match_date, league.trim(), homePoints, awayPoints, drawPoints]
+      );
 
-    // Aynı takımın kendisiyle oynamaması kontrolü
-    if (home_team && away_team && home_team.trim().toLowerCase() === away_team.trim().toLowerCase()) {
-      validationErrors.push('Bir takım kendisiyle oynayamaz');
-    }
-
-    if (validationErrors.length > 0) {
-      return res.status(400).json({ 
-        message: 'Validation hatası', 
-        errors: validationErrors 
+      res.status(201).json({
+        message: 'Maç oluşturuldu',
+        matchId: result.insertId
       });
+    } catch (error) {
+      console.error('Create match error:', error);
+      res.status(500).json({ message: 'Sunucu hatası' });
     }
-
-    const [result] = await db.execute(
-      'INSERT INTO matches (home_team, away_team, match_date, league, home_points, away_points, draw_points) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [home_team.trim(), away_team.trim(), match_date, league.trim(), homePoints, awayPoints, drawPoints]
-    );
-
-    res.status(201).json({
-      message: 'Maç oluşturuldu',
-      matchId: result.insertId
-    });
-  } catch (error) {
-    console.error('Create match error:', error);
-    res.status(500).json({ message: 'Sunucu hatası' });
-  }
-});
+  });
 
 // Maç sonucu belirle (Admin)
 router.put('/:id/result', auth, async (req, res) => {
