@@ -8,7 +8,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(255) NOT NULL,
   role ENUM('user', 'admin') DEFAULT 'user',
   points INT DEFAULT 0,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Maçlar tablosu
@@ -18,12 +19,13 @@ CREATE TABLE IF NOT EXISTS matches (
   away_team VARCHAR(100) NOT NULL,
   match_date DATETIME NOT NULL,
   league VARCHAR(100) NOT NULL,
-  status ENUM('active', 'completed') DEFAULT 'active',
+  status ENUM('active', 'completed', 'cancelled') DEFAULT 'active',
   result ENUM('home', 'away', 'draw') NULL,
   home_points INT DEFAULT 10,
   away_points INT DEFAULT 10,
   draw_points INT DEFAULT 15,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Tahminler tablosu
@@ -32,7 +34,9 @@ CREATE TABLE IF NOT EXISTS predictions (
   user_id INT NOT NULL,
   match_id INT NOT NULL,
   selected_team ENUM('home', 'away', 'draw') NOT NULL,
+  points INT DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE CASCADE,
   UNIQUE KEY unique_user_match (user_id, match_id)
@@ -46,13 +50,26 @@ CREATE TABLE IF NOT EXISTS awards (
   week_end DATE NOT NULL,
   position INT NOT NULL,
   points_earned INT NOT NULL,
-  bonus_points INT DEFAULT 0,
+  reward_code VARCHAR(255),
   description VARCHAR(255),
   awarded_by INT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY (awarded_by) REFERENCES users(id) ON DELETE SET NULL,
   UNIQUE KEY unique_user_week_position (user_id, week_start, position)
+);
+
+-- Profil Yorumları tablosu
+CREATE TABLE IF NOT EXISTS profile_comments (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    commenter_user_id INT NOT NULL,
+    profile_user_id INT NOT NULL,
+    comment_text VARCHAR(500) NOT NULL,
+    is_deleted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (commenter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (profile_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 -- Test kullanıcıları
